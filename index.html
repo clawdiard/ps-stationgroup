@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StationGroup — Television Station Portfolio Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--surface:#12121a;--surface2:#1a1a25;--border:#2a2a3a;--text:#e8e8f0;--text2:#8888a0;--accent:#4a9eff;--accent2:#7c5cfc;--green:#34d399;--amber:#fbbf24;--red:#f87171;--gold:#d4a853}
+body{font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.app{max-width:1400px;margin:0 auto;padding:24px}
+header{text-align:center;padding:40px 0 32px;border-bottom:1px solid var(--border);margin-bottom:32px}
+header h1{font-size:2.4rem;font-weight:700;letter-spacing:-0.5px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+header p{color:var(--text2);margin-top:8px;font-size:1.05rem}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:32px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;text-align:center}
+.kpi .value{font-size:2rem;font-weight:700;color:var(--accent)}
+.kpi .label{font-size:.85rem;color:var(--text2);margin-top:4px}
+.controls{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;align-items:center}
+.controls input,.controls select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:.9rem;outline:none}
+.controls input{flex:1;min-width:200px}
+.controls select{min-width:140px}
+.controls input:focus,.controls select:focus{border-color:var(--accent)}
+.map-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:32px;position:relative;overflow:hidden}
+.map-section h2{font-size:1.2rem;margin-bottom:16px;color:var(--text2)}
+#map-container{width:100%;height:480px;position:relative}
+#map-container svg{width:100%;height:100%}
+.station-dot{cursor:pointer;transition:r .2s}
+.station-dot:hover{r:8}
+.tooltip{position:absolute;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:.85rem;pointer-events:none;opacity:0;transition:opacity .15s;z-index:100;max-width:280px}
+.tooltip.show{opacity:1}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{background:var(--surface2);padding:14px 16px;text-align:left;font-size:.8rem;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);font-weight:600;position:sticky;top:0;cursor:pointer;user-select:none}
+th:hover{color:var(--accent)}
+th .sort-arrow{margin-left:4px;opacity:.4}
+th.active .sort-arrow{opacity:1;color:var(--accent)}
+td{padding:12px 16px;border-top:1px solid var(--border);font-size:.9rem;white-space:nowrap}
+tr:hover td{background:rgba(74,158,255,.04)}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:.75rem;font-weight:600}
+.badge-abc{background:rgba(74,158,255,.15);color:var(--accent)}
+.badge-nbc{background:rgba(124,92,252,.15);color:var(--accent2)}
+.badge-cbs{background:rgba(52,211,153,.15);color:var(--green)}
+.badge-cw{background:rgba(251,191,36,.15);color:var(--amber)}
+.badge-ind{background:rgba(248,113,113,.15);color:var(--red)}
+.rank{font-weight:700;color:var(--gold)}
+.market-bar{height:6px;border-radius:3px;background:var(--border);position:relative;min-width:80px}
+.market-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.scroll-table{max-height:700px;overflow-y:auto}
+.scroll-table::-webkit-scrollbar{width:6px}
+.scroll-table::-webkit-scrollbar-track{background:var(--surface)}
+.scroll-table::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+footer{text-align:center;padding:32px 0;color:var(--text2);font-size:.8rem;border-top:1px solid var(--border);margin-top:32px}
+@media(max-width:768px){.app{padding:16px}header h1{font-size:1.8rem}#map-container{height:300px}td,th{padding:10px 12px;font-size:.8rem}.kpi-row{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+<h1>📡 StationGroup</h1>
+<p>Television Station Portfolio Dashboard — 33 Stations · 26 Markets · 39M+ Households</p>
+</header>
+
+<div class="kpi-row" id="kpis"></div>
+
+<div class="controls">
+<input type="text" id="search" placeholder="Search by station, market, or state...">
+<select id="filterNetwork"><option value="">All Networks</option><option value="ABC">ABC</option><option value="NBC">NBC</option><option value="CBS">CBS</option><option value="CW">CW+</option><option value="IND">Independent</option></select>
+<select id="filterRegion"><option value="">All Regions</option><option value="Northeast">Northeast</option><option value="Southeast">Southeast</option><option value="Midwest">Midwest</option><option value="South">South</option><option value="West">West</option></select>
+</div>
+
+<div class="map-section">
+<h2>Station Footprint</h2>
+<div id="map-container"></div>
+<div class="tooltip" id="tooltip"></div>
+</div>
+
+<div class="table-wrap">
+<div class="scroll-table">
+<table id="stationTable">
+<thead>
+<tr>
+<th data-col="call" class="active">Call Sign <span class="sort-arrow">▲</span></th>
+<th data-col="network">Network <span class="sort-arrow">▲</span></th>
+<th data-col="market">Market <span class="sort-arrow">▲</span></th>
+<th data-col="rank">DMA Rank <span class="sort-arrow">▲</span></th>
+<th data-col="state">State <span class="sort-arrow">▲</span></th>
+<th data-col="region">Region <span class="sort-arrow">▲</span></th>
+<th data-col="hh">Households <span class="sort-arrow">▲</span></th>
+<th data-col="coverage">Coverage <span class="sort-arrow">▲</span></th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
+</div>
+</div>
+
+<footer>
+<p>StationGroup Dashboard · Data compiled from public FCC and Nielsen DMA records · Updated Feb 2026</p>
+</footer>
+</div>
+
+<script>
+const stations=[
+{call:"WCVB",ch:5,network:"ABC",market:"Boston",rank:9,state:"MA",region:"Northeast",hh:2480000,lat:42.36,lon:-71.06},
+{call:"WMUR",ch:9,network:"ABC",market:"Manchester",rank:71,state:"NH",region:"Northeast",hh:481000,lat:42.99,lon:-71.46},
+{call:"WTAE",ch:4,network:"ABC",market:"Pittsburgh",rank:27,state:"PA",region:"Northeast",hh:1130000,lat:40.44,lon:-79.99},
+{call:"WBAL",ch:11,network:"NBC",market:"Baltimore",rank:28,state:"MD",region:"Northeast",hh:1120000,lat:39.29,lon:-76.61},
+{call:"WYFF",ch:4,network:"NBC",market:"Greenville-Spartanburg",rank:36,state:"SC",region:"Southeast",hh:897000,lat:34.85,lon:-82.40},
+{call:"WLWT",ch:5,network:"NBC",market:"Cincinnati",rank:38,state:"OH",region:"Midwest",hh:879000,lat:39.10,lon:-84.51},
+{call:"KOCO",ch:5,network:"ABC",market:"Oklahoma City",rank:41,state:"OK",region:"South",hh:759000,lat:35.47,lon:-97.52},
+{call:"WISN",ch:12,network:"ABC",market:"Milwaukee",rank:34,state:"WI",region:"Midwest",hh:912000,lat:43.04,lon:-87.91},
+{call:"WDSU",ch:6,network:"NBC",market:"New Orleans",rank:53,state:"LA",region:"South",hh:647000,lat:29.95,lon:-90.07},
+{call:"WGAL",ch:8,network:"NBC",market:"Lancaster-Harrisburg",rank:43,state:"PA",region:"Northeast",hh:749000,lat:40.04,lon:-76.31},
+{call:"KOAT",ch:7,network:"ABC",market:"Albuquerque",rank:44,state:"NM",region:"West",hh:699000,lat:35.08,lon:-106.65},
+{call:"KETV",ch:7,network:"ABC",market:"Omaha",rank:72,state:"NE",region:"Midwest",hh:478000,lat:41.26,lon:-95.94},
+{call:"WAPT",ch:16,network:"ABC",market:"Jackson",rank:91,state:"MS",region:"South",hh:365000,lat:32.30,lon:-90.18},
+{call:"KHBS/KHOG",ch:40,network:"ABC",market:"Fort Smith-Fayetteville",rank:101,state:"AR",region:"South",hh:322000,lat:35.39,lon:-94.40},
+{call:"WPBF",ch:25,network:"ABC",market:"West Palm Beach",rank:39,state:"FL",region:"Southeast",hh:850000,lat:26.72,lon:-80.05},
+{call:"WESH",ch:2,network:"NBC",market:"Orlando-Daytona Beach",rank:18,state:"FL",region:"Southeast",hh:1590000,lat:28.54,lon:-81.38},
+{call:"KCRA",ch:3,network:"NBC",market:"Sacramento",rank:20,state:"CA",region:"West",hh:1450000,lat:38.58,lon:-121.49},
+{call:"KQCA",ch:58,network:"CW+",market:"Sacramento",rank:20,state:"CA",region:"West",hh:1450000,lat:38.60,lon:-121.44},
+{call:"WMTW",ch:8,network:"ABC",market:"Portland (ME)",rank:78,state:"ME",region:"Northeast",hh:438000,lat:43.66,lon:-70.26},
+{call:"KCWE",ch:29,network:"CW+",market:"Kansas City",rank:33,state:"MO",region:"Midwest",hh:926000,lat:39.10,lon:-94.58},
+{call:"KMBC",ch:9,network:"ABC",market:"Kansas City",rank:33,state:"MO",region:"Midwest",hh:926000,lat:39.08,lon:-94.60},
+{call:"WXII",ch:12,network:"NBC",market:"Greensboro-Winston Salem",rank:46,state:"NC",region:"Southeast",hh:694000,lat:36.07,lon:-79.79},
+{call:"WVTM",ch:13,network:"NBC",market:"Birmingham",rank:45,state:"AL",region:"Southeast",hh:697000,lat:33.52,lon:-86.81},
+{call:"KCCI",ch:8,network:"CBS",market:"Des Moines",rank:73,state:"IA",region:"Midwest",hh:475000,lat:41.59,lon:-93.62},
+{call:"WJCL",ch:22,network:"ABC",market:"Savannah",rank:92,state:"GA",region:"Southeast",hh:355000,lat:32.08,lon:-81.09},
+{call:"WPTZ",ch:5,network:"NBC",market:"Burlington-Plattsburgh",rank:96,state:"VT",region:"Northeast",hh:340000,lat:44.48,lon:-73.21},
+{call:"KCCI",ch:17,network:"IND",market:"Des Moines",rank:73,state:"IA",region:"Midwest",hh:475000,lat:41.60,lon:-93.58},
+{call:"WMOR",ch:32,network:"IND",market:"Tampa-St. Petersburg",rank:11,state:"FL",region:"Southeast",hh:2020000,lat:27.95,lon:-82.46},
+{call:"WKCF",ch:18,network:"CW+",market:"Orlando",rank:18,state:"FL",region:"Southeast",hh:1590000,lat:28.56,lon:-81.35},
+{call:"WLKY",ch:32,network:"CBS",market:"Louisville",rank:48,state:"KY",region:"Southeast",hh:678000,lat:38.25,lon:-85.76},
+{call:"KLKN",ch:8,network:"ABC",market:"Lincoln-Hastings",rank:106,state:"NE",region:"Midwest",hh:293000,lat:40.81,lon:-96.70},
+{call:"WGAS",ch:34,network:"IND",market:"Greenville-Spartanburg",rank:36,state:"SC",region:"Southeast",hh:897000,lat:34.83,lon:-82.37},
+{call:"WNNE",ch:31,network:"CW+",market:"Burlington-Plattsburgh",rank:96,state:"VT",region:"Northeast",hh:340000,lat:44.46,lon:-73.18}
+];
+
+// KPIs
+const totalHH=new Set();let netCounts={};stations.forEach(s=>{totalHH.add(s.market+s.hh);netCounts[s.network]=(netCounts[s.network]||0)+1});
+const uniqueMarkets=new Set(stations.map(s=>s.market)).size;
+const totalHHVal=[...new Set(stations.map(s=>s.market))].reduce((sum,m)=>{const s=stations.find(x=>x.market===m);return sum+s.hh},0);
+document.getElementById('kpis').innerHTML=`
+<div class="kpi"><div class="value">${stations.length}</div><div class="label">Stations</div></div>
+<div class="kpi"><div class="value">${uniqueMarkets}</div><div class="label">Markets (DMAs)</div></div>
+<div class="kpi"><div class="value">${(totalHHVal/1e6).toFixed(1)}M</div><div class="label">Households Reached</div></div>
+<div class="kpi"><div class="value">${Object.keys(netCounts).length}</div><div class="label">Network Affiliations</div></div>
+<div class="kpi"><div class="value">${new Set(stations.map(s=>s.state)).size}</div><div class="label">States</div></div>
+`;
+
+// Map
+const mapC=document.getElementById('map-container');
+const tooltip=document.getElementById('tooltip');
+const W=960,H=600;
+function proj(lat,lon){const x=(lon+130)/((-65+130))*W;const y=(50-lat)/((24-50))*H*-1+H;return[x,H-y]}
+let svgHTML=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"><rect width="${W}" height="${H}" fill="transparent"/>`;
+const netColors={ABC:'#4a9eff',NBC:'#7c5cfc',CBS:'#34d399','CW+':'#fbbf24',IND:'#f87171'};
+stations.forEach((s,i)=>{
+const[x,y]=proj(s.lat,s.lon);
+svgHTML+=`<circle class="station-dot" cx="${x}" cy="${y}" r="5" fill="${netColors[s.network]||'#888'}" opacity=".85" data-i="${i}"/>`;
+});
+svgHTML+=`</svg>`;
+mapC.innerHTML=svgHTML;
+
+mapC.addEventListener('mouseover',e=>{
+if(e.target.classList.contains('station-dot')){
+const s=stations[e.target.dataset.i];
+tooltip.innerHTML=`<strong>${s.call}</strong> · Ch ${s.ch}<br>${s.network} · ${s.market}, ${s.state}<br>DMA #${s.rank} · ${(s.hh/1e6).toFixed(2)}M HH`;
+tooltip.classList.add('show');
+const r=mapC.getBoundingClientRect();
+tooltip.style.left=(e.clientX-r.left+12)+'px';
+tooltip.style.top=(e.clientY-r.top-10)+'px';
+}
+});
+mapC.addEventListener('mouseout',e=>{if(e.target.classList.contains('station-dot'))tooltip.classList.remove('show')});
+mapC.addEventListener('mousemove',e=>{
+if(tooltip.classList.contains('show')){
+const r=mapC.getBoundingClientRect();
+tooltip.style.left=(e.clientX-r.left+12)+'px';
+tooltip.style.top=(e.clientY-r.top-10)+'px';
+}
+});
+
+// Table
+const maxHH=Math.max(...stations.map(s=>s.hh));
+let sortCol='call',sortAsc=true;
+function badgeClass(n){return n==='ABC'?'badge-abc':n==='NBC'?'badge-nbc':n==='CBS'?'badge-cbs':n.startsWith('CW')?'badge-cw':'badge-ind'}
+
+function render(data){
+document.getElementById('tbody').innerHTML=data.map(s=>`<tr>
+<td><strong>${s.call}</strong></td>
+<td><span class="badge ${badgeClass(s.network)}">${s.network}</span></td>
+<td>${s.market}</td>
+<td><span class="rank">#${s.rank}</span></td>
+<td>${s.state}</td>
+<td>${s.region}</td>
+<td>${(s.hh/1e6).toFixed(2)}M</td>
+<td><div class="market-bar"><div class="market-bar-fill" style="width:${(s.hh/maxHH*100).toFixed(1)}%"></div></div></td>
+</tr>`).join('');
+}
+
+function getFiltered(){
+const q=document.getElementById('search').value.toLowerCase();
+const net=document.getElementById('filterNetwork').value;
+const reg=document.getElementById('filterRegion').value;
+let d=stations.filter(s=>{
+if(q&&!(s.call.toLowerCase().includes(q)||s.market.toLowerCase().includes(q)||s.state.toLowerCase().includes(q)))return false;
+if(net){if(net==='CW+'?!s.network.startsWith('CW'):net==='IND'?s.network!=='IND':s.network!==net)return false}
+if(reg&&s.region!==reg)return false;
+return true;
+});
+d.sort((a,b)=>{
+let va=a[sortCol],vb=b[sortCol];
+if(sortCol==='hh'||sortCol==='rank'){va=+va;vb=+vb}else{va=String(va).toLowerCase();vb=String(vb).toLowerCase()}
+return va<vb?(sortAsc?-1:1):va>vb?(sortAsc?1:-1):0;
+});
+return d;
+}
+
+function update(){render(getFiltered())}
+
+document.getElementById('search').addEventListener('input',update);
+document.getElementById('filterNetwork').addEventListener('change',update);
+document.getElementById('filterRegion').addEventListener('change',update);
+
+document.querySelectorAll('th[data-col]').forEach(th=>{
+th.addEventListener('click',()=>{
+const col=th.dataset.col;
+if(sortCol===col)sortAsc=!sortAsc;else{sortCol=col;sortAsc=true}
+document.querySelectorAll('th').forEach(t=>t.classList.remove('active'));
+th.classList.add('active');
+th.querySelector('.sort-arrow').textContent=sortAsc?'▲':'▼';
+update();
+});
+});
+
+update();
+</script>
+</body>
+</html>
