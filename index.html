@@ -67,6 +67,36 @@ tr:hover td{background:rgba(74,158,255,.04)}
 tr.expanded>td{background:rgba(74,158,255,.06)!important}
 @media(max-width:768px){.detail-panel{grid-template-columns:1fr}}
 footer{text-align:center;padding:32px 0;color:var(--text2);font-size:.8rem;border-top:1px solid var(--border);margin-top:32px}
+.analysis-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-top:32px}
+.analysis-header{margin-bottom:24px}
+.analysis-header h2{font-size:1.4rem;margin-bottom:4px}
+.analysis-subtitle{color:var(--text2);font-size:.9rem;margin-bottom:16px}
+.analysis-tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tab-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:8px 18px;border-radius:8px;font-size:.85rem;cursor:pointer;transition:all .15s}
+.tab-btn:hover{border-color:var(--accent);color:var(--text)}
+.tab-btn.active{background:rgba(74,158,255,.12);border-color:var(--accent);color:var(--accent);font-weight:600}
+.tab-content{margin-top:8px}
+.analysis-grid{display:grid;grid-template-columns:1fr;gap:16px}
+.overlap-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:18px}
+.overlap-card h3{font-size:1rem;margin-bottom:8px;color:var(--accent)}
+.overlap-card .overlap-stations{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.overlap-card .overlap-meta{font-size:.82rem;color:var(--text2);line-height:1.6}
+.overlap-card .overlap-meta strong{color:var(--text)}
+.gaps-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.gap-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:18px}
+.gap-card h4{font-size:.9rem;color:var(--amber);margin-bottom:6px}
+.gap-card p{font-size:.82rem;color:var(--text2);line-height:1.5}
+.gap-card .gap-stat{font-size:1.4rem;font-weight:700;color:var(--text);margin:8px 0}
+.expansion-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.expansion-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:18px;position:relative;overflow:hidden}
+.expansion-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.expansion-card h4{font-size:.95rem;margin-bottom:4px}
+.expansion-card .exp-rank{font-size:.75rem;color:var(--text2)}
+.expansion-card .exp-hh{font-size:1.2rem;font-weight:700;color:var(--green);margin:8px 0 4px}
+.expansion-card .exp-reason{font-size:.8rem;color:var(--text2);line-height:1.5}
+.expansion-card .exp-score{position:absolute;top:14px;right:16px;font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);font-weight:600}
+.gap-dot{cursor:pointer;transition:r .2s}
+.gap-dot:hover{r:10}
 @media(max-width:768px){.app{padding:16px}header h1{font-size:1.8rem}#map-container{height:300px}td,th{padding:10px 12px;font-size:.8rem}.kpi-row{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
@@ -109,6 +139,33 @@ footer{text-align:center;padding:32px 0;color:var(--text2);font-size:.8rem;borde
 </thead>
 <tbody id="tbody"></tbody>
 </table>
+</div>
+</div>
+
+<!-- Market Analysis Section -->
+<div class="analysis-section" id="analysis-section">
+<div class="analysis-header">
+<h2>📊 Market Analysis</h2>
+<p class="analysis-subtitle">Coverage gaps, market overlap, and expansion opportunities</p>
+<div class="analysis-tabs">
+<button class="tab-btn active" data-tab="overlap">Market Overlap</button>
+<button class="tab-btn" data-tab="gaps">Coverage Gaps</button>
+<button class="tab-btn" data-tab="expansion">Expansion Opportunities</button>
+</div>
+</div>
+
+<div class="tab-content" id="tab-overlap" style="display:block">
+<div class="analysis-grid" id="overlap-grid"></div>
+</div>
+
+<div class="tab-content" id="tab-gaps" style="display:none">
+<div class="gaps-summary" id="gaps-summary"></div>
+<div id="gaps-map-container" style="width:100%;height:400px;margin-top:16px;position:relative"></div>
+<div class="tooltip" id="gaps-tooltip"></div>
+</div>
+
+<div class="tab-content" id="tab-expansion" style="display:none">
+<div class="expansion-list" id="expansion-list"></div>
 </div>
 </div>
 
@@ -342,6 +399,102 @@ update();
 });
 
 update();
+
+// === MARKET ANALYSIS ===
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+btn.addEventListener('click',()=>{
+document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+document.querySelectorAll('.tab-content').forEach(c=>c.style.display='none');
+btn.classList.add('active');
+document.getElementById('tab-'+btn.dataset.tab).style.display='block';
+});
+});
+
+// 1. Market Overlap
+(function renderOverlap(){
+const byMarket={};
+stations.forEach(s=>{if(!byMarket[s.market])byMarket[s.market]={stations:[],rank:s.rank,hh:s.hh,state:s.state};byMarket[s.market].stations.push(s)});
+const overlaps=Object.entries(byMarket).filter(([,v])=>v.stations.length>1).sort((a,b)=>b[1].hh-a[1].hh);
+document.getElementById('overlap-grid').innerHTML=overlaps.length?overlaps.map(([market,data])=>{
+const nets=data.stations.map(s=>s.network);
+const dupeNets=nets.filter((n,i)=>nets.indexOf(n)!==i);
+const badges=data.stations.map(s=>`<span class="badge ${badgeClass(s.network)}">${s.call} (${s.network})</span>`).join('');
+return `<div class="overlap-card"><h3>${market}, ${data.state} — DMA #${data.rank}</h3><div class="overlap-stations">${badges}</div><div class="overlap-meta"><strong>${data.stations.length} stations</strong> · <strong>${(data.hh/1e6).toFixed(2)}M</strong> HH${dupeNets.length?` · <span style="color:var(--amber)">⚠ Duplicate: ${[...new Set(dupeNets)].join(', ')}</span>`:''}<br><em>Multi-station presence enables cross-promotion and schedule optimization</em></div></div>`;
+}).join(''):'<p style="color:var(--text2);padding:16px">No multi-station markets.</p>';
+})();
+
+// 2. Coverage Gaps
+(function renderGaps(){
+const coveredStates=new Set(stations.map(s=>s.state));
+const allStates='AL,AK,AZ,AR,CA,CO,CT,DE,FL,GA,HI,ID,IL,IN,IA,KS,KY,LA,ME,MD,MA,MI,MN,MS,MO,MT,NE,NV,NH,NJ,NM,NY,NC,ND,OH,OK,OR,PA,RI,SC,SD,TN,TX,UT,VT,VA,WA,WV,WI,WY,DC'.split(',');
+const missingStates=allStates.filter(s=>!coveredStates.has(s));
+const coveredMarkets=new Set(stations.map(s=>s.market));
+const topDMAs=[
+{market:'New York',rank:1,hh:7400000,state:'NY',lat:40.71,lon:-73.99},{market:'Los Angeles',rank:2,hh:5700000,state:'CA',lat:34.05,lon:-118.24},
+{market:'Chicago',rank:3,hh:3470000,state:'IL',lat:41.88,lon:-87.63},{market:'Philadelphia',rank:4,hh:2940000,state:'PA',lat:39.95,lon:-75.17},
+{market:'Dallas-Fort Worth',rank:5,hh:2870000,state:'TX',lat:32.78,lon:-96.80},{market:'San Francisco-Oakland',rank:6,hh:2600000,state:'CA',lat:37.77,lon:-122.42},
+{market:'Washington DC',rank:7,hh:2500000,state:'DC',lat:38.91,lon:-77.04},{market:'Houston',rank:8,hh:2490000,state:'TX',lat:29.76,lon:-95.37},
+{market:'Atlanta',rank:10,hh:2460000,state:'GA',lat:33.75,lon:-84.39},{market:'Seattle-Tacoma',rank:12,hh:2000000,state:'WA',lat:47.61,lon:-122.33},
+{market:'Phoenix',rank:13,hh:1980000,state:'AZ',lat:33.45,lon:-112.07},{market:'Detroit',rank:14,hh:1890000,state:'MI',lat:42.33,lon:-83.05},
+{market:'Minneapolis-St. Paul',rank:15,hh:1860000,state:'MN',lat:44.98,lon:-93.27},{market:'Denver',rank:16,hh:1770000,state:'CO',lat:39.74,lon:-104.99},
+{market:'Miami-Fort Lauderdale',rank:17,hh:1710000,state:'FL',lat:25.76,lon:-80.19},{market:'Cleveland',rank:19,hh:1510000,state:'OH',lat:41.50,lon:-81.69},
+{market:'Portland OR',rank:21,hh:1240000,state:'OR',lat:45.52,lon:-122.68},{market:'Charlotte',rank:23,hh:1200000,state:'NC',lat:35.23,lon:-80.84},
+{market:'Nashville',rank:29,hh:1070000,state:'TN',lat:36.16,lon:-86.78},{market:'Salt Lake City',rank:32,hh:960000,state:'UT',lat:40.76,lon:-111.89}
+];
+const uncoveredDMAs=topDMAs.filter(d=>!coveredMarkets.has(d.market)).sort((a,b)=>a.rank-b.rank);
+const uncoveredHH=uncoveredDMAs.reduce((s,d)=>s+d.hh,0);
+const coveredRegions={};stations.forEach(s=>{if(!coveredRegions[s.region])coveredRegions[s.region]={count:0};coveredRegions[s.region].count++});
+const regionNets={};stations.forEach(s=>{if(!regionNets[s.region])regionNets[s.region]=new Set();regionNets[s.region].add(s.network)});
+const allNets=['ABC','NBC','CBS','CW+','IND'];
+
+document.getElementById('gaps-summary').innerHTML=`
+<div class="gap-card"><h4>Uncovered States</h4><div class="gap-stat">${missingStates.length} / ${allStates.length}</div><p>${missingStates.length?missingStates.join(', '):'Full coverage!'}</p></div>
+<div class="gap-card"><h4>Top 20 DMA Gaps</h4><div class="gap-stat">${uncoveredDMAs.length} markets</div><p>${(uncoveredHH/1e6).toFixed(1)}M unreached HH</p></div>
+<div class="gap-card"><h4>Regional Balance</h4><div class="gap-stat">${Object.keys(coveredRegions).length} regions</div><p>${Object.entries(coveredRegions).map(([r,d])=>r+': '+d.count).join(' · ')}</p></div>
+<div class="gap-card"><h4>Network Gaps by Region</h4><div class="gap-stat">—</div><p>${Object.entries(regionNets).map(([r,nets])=>{const m=allNets.filter(n=>!nets.has(n));return m.length?r+': no '+m.join(', '):r+': all'}).join(' · ')}</p></div>`;
+
+// Gaps map
+const gapMapC=document.getElementById('gaps-map-container');
+const gapTT=document.getElementById('gaps-tooltip');
+let gSVG=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"><rect width="${W}" height="${H}" fill="transparent"/>`;
+stations.forEach(s=>{const[x,y]=proj(s.lat,s.lon);gSVG+=`<circle cx="${x}" cy="${y}" r="4" fill="${netColors[s.network]||'#888'}" opacity=".25"/>`;});
+uncoveredDMAs.forEach((d,i)=>{const[x,y]=proj(d.lat,d.lon);gSVG+=`<circle class="gap-dot" cx="${x}" cy="${y}" r="${Math.max(5,Math.min(12,d.hh/500000))}" fill="var(--amber)" opacity=".7" data-gi="${i}"><animate attributeName="opacity" values=".4;.8;.4" dur="2s" repeatCount="indefinite"/></circle>`;});
+gSVG+=`</svg>`;gapMapC.innerHTML=gSVG;
+gapMapC.addEventListener('mouseover',e=>{if(e.target.classList.contains('gap-dot')){const d=uncoveredDMAs[e.target.dataset.gi];gapTT.innerHTML=`<strong>${d.market}, ${d.state}</strong><br>DMA #${d.rank} · ${(d.hh/1e6).toFixed(2)}M HH<br><em>Not in portfolio</em>`;gapTT.classList.add('show');const r=gapMapC.getBoundingClientRect();gapTT.style.left=(e.clientX-r.left+12)+'px';gapTT.style.top=(e.clientY-r.top-10)+'px'}});
+gapMapC.addEventListener('mouseout',e=>{if(e.target.classList.contains('gap-dot'))gapTT.classList.remove('show')});
+gapMapC.addEventListener('mousemove',e=>{if(gapTT.classList.contains('show')){const r=gapMapC.getBoundingClientRect();gapTT.style.left=(e.clientX-r.left+12)+'px';gapTT.style.top=(e.clientY-r.top-10)+'px'}});
+})();
+
+// 3. Expansion Opportunities
+(function renderExpansion(){
+const coveredMarkets=new Set(stations.map(s=>s.market));
+const coveredRegionCount={};stations.forEach(s=>{coveredRegionCount[s.region]=(coveredRegionCount[s.region]||0)+1});
+const topDMAs=[
+{market:'New York',rank:1,hh:7400000,state:'NY',region:'Northeast'},{market:'Los Angeles',rank:2,hh:5700000,state:'CA',region:'West'},
+{market:'Chicago',rank:3,hh:3470000,state:'IL',region:'Midwest'},{market:'Philadelphia',rank:4,hh:2940000,state:'PA',region:'Northeast'},
+{market:'Dallas-Fort Worth',rank:5,hh:2870000,state:'TX',region:'South'},{market:'San Francisco-Oakland',rank:6,hh:2600000,state:'CA',region:'West'},
+{market:'Washington DC',rank:7,hh:2500000,state:'DC',region:'Northeast'},{market:'Houston',rank:8,hh:2490000,state:'TX',region:'South'},
+{market:'Atlanta',rank:10,hh:2460000,state:'GA',region:'Southeast'},{market:'Seattle-Tacoma',rank:12,hh:2000000,state:'WA',region:'West'},
+{market:'Phoenix',rank:13,hh:1980000,state:'AZ',region:'West'},{market:'Detroit',rank:14,hh:1890000,state:'MI',region:'Midwest'},
+{market:'Minneapolis-St. Paul',rank:15,hh:1860000,state:'MN',region:'Midwest'},{market:'Denver',rank:16,hh:1770000,state:'CO',region:'West'},
+{market:'Miami-Fort Lauderdale',rank:17,hh:1710000,state:'FL',region:'Southeast'},{market:'Cleveland',rank:19,hh:1510000,state:'OH',region:'Midwest'},
+{market:'Portland OR',rank:21,hh:1240000,state:'OR',region:'West'},{market:'Charlotte',rank:23,hh:1200000,state:'NC',region:'Southeast'},
+{market:'Nashville',rank:29,hh:1070000,state:'TN',region:'Southeast'},{market:'Salt Lake City',rank:32,hh:960000,state:'UT',region:'West'}
+];
+const uncovered=topDMAs.filter(d=>!coveredMarkets.has(d.market));
+uncovered.forEach(d=>{
+const rp=coveredRegionCount[d.region]||0;
+d.score=Math.min(40,Math.round(d.hh/200000))+Math.max(0,30-d.rank)+(rp>0?15:0)+(rp<3?10:0);
+d.reasons=[];
+if(d.rank<=10)d.reasons.push('Top 10 DMA — premium market');
+if(rp>0)d.reasons.push('Synergy with '+rp+' existing '+d.region+' station'+(rp>1?'s':''));
+if(rp===0)d.reasons.push('Opens new region: '+d.region);
+if(d.hh>=2000000)d.reasons.push('2M+ household reach');
+if(rp<3)d.reasons.push('Improves regional diversity');
+});
+uncovered.sort((a,b)=>b.score-a.score);
+document.getElementById('expansion-list').innerHTML=uncovered.map(d=>`<div class="expansion-card"><div class="exp-score">Score: ${d.score}</div><h4>${d.market}, ${d.state}</h4><div class="exp-rank">DMA #${d.rank} · ${d.region}</div><div class="exp-hh">${(d.hh/1e6).toFixed(2)}M HH</div><div class="exp-reason">${d.reasons.map(r=>'• '+r).join('<br>')}</div></div>`).join('');
+})();
 </script>
 </body>
 </html>
