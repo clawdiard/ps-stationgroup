@@ -65,6 +65,35 @@ tr:hover td{background:rgba(74,158,255,.04)}
 .expand-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:1.1rem;padding:2px 6px;border-radius:4px;transition:background .15s}
 .expand-btn:hover{background:rgba(74,158,255,.1)}
 tr.expanded>td{background:rgba(74,158,255,.06)!important}
+.rev-tier{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:.8rem}
+.rev-tier .tier-icon{width:18px;height:18px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:.7rem}
+.tier-platinum .tier-icon{background:rgba(212,168,83,.2);color:var(--gold)}
+.tier-gold .tier-icon{background:rgba(251,191,36,.15);color:var(--amber)}
+.tier-silver .tier-icon{background:rgba(136,136,160,.2);color:var(--text2)}
+.tier-bronze .tier-icon{background:rgba(180,120,80,.15);color:#b47850}
+.tier-platinum{color:var(--gold)}.tier-gold{color:var(--amber)}.tier-silver{color:var(--text2)}.tier-bronze{color:#b47850}
+.rating-indicator{display:inline-flex;align-items:center;gap:6px;font-size:.85rem}
+.rating-val{font-weight:700}
+.rating-up{color:var(--green)}.rating-down{color:var(--red)}.rating-flat{color:var(--text2)}
+.rating-arrow{font-size:.7rem}
+.sparkline-wrap{display:inline-block;vertical-align:middle}
+.sparkline-wrap svg{display:block}
+.perf-overlay{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:32px}
+.perf-overlay h2{font-size:1.2rem;margin-bottom:4px}
+.perf-subtitle{color:var(--text2);font-size:.85rem;margin-bottom:20px}
+.perf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.perf-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:18px;position:relative}
+.perf-card h4{font-size:.95rem;margin-bottom:2px}
+.perf-card .perf-meta{font-size:.75rem;color:var(--text2);margin-bottom:12px}
+.perf-card .perf-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:.85rem}
+.perf-card .perf-row:last-child{border-bottom:none}
+.perf-card .perf-label{color:var(--text2)}
+.perf-card .perf-value{font-weight:600}
+.trend-sparkline{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.perf-toggles{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.perf-toggle{background:var(--surface2);border:1px solid var(--border);color:var(--text2);padding:6px 14px;border-radius:6px;font-size:.8rem;cursor:pointer;transition:all .15s}
+.perf-toggle:hover{border-color:var(--accent);color:var(--text)}
+.perf-toggle.active{background:rgba(74,158,255,.12);border-color:var(--accent);color:var(--accent);font-weight:600}
 @media(max-width:768px){.detail-panel{grid-template-columns:1fr}}
 footer{text-align:center;padding:32px 0;color:var(--text2);font-size:.8rem;border-top:1px solid var(--border);margin-top:32px}
 .analysis-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-top:32px}
@@ -134,12 +163,29 @@ footer{text-align:center;padding:32px 0;color:var(--text2);font-size:.8rem;borde
 <th data-col="state">State <span class="sort-arrow">▲</span></th>
 <th data-col="region">Region <span class="sort-arrow">▲</span></th>
 <th data-col="hh">Households <span class="sort-arrow">▲</span></th>
+<th data-col="revenue">Revenue Tier <span class="sort-arrow">▲</span></th>
+<th data-col="rating">Rating <span class="sort-arrow">▲</span></th>
+<th data-col="trend">Trend <span class="sort-arrow">▲</span></th>
 <th data-col="coverage">Coverage <span class="sort-arrow">▲</span></th>
 </tr>
 </thead>
 <tbody id="tbody"></tbody>
 </table>
 </div>
+</div>
+
+<!-- Revenue & Ratings Performance Overlay -->
+<div class="perf-overlay" id="perf-overlay">
+<h2>💰 Revenue & Ratings Performance</h2>
+<p class="perf-subtitle">Estimated revenue tiers and Nielsen ratings with 6-quarter trend sparklines</p>
+<div class="perf-toggles">
+<button class="perf-toggle active" data-pf="all">All Tiers</button>
+<button class="perf-toggle" data-pf="platinum">Platinum</button>
+<button class="perf-toggle" data-pf="gold">Gold</button>
+<button class="perf-toggle" data-pf="silver">Silver</button>
+<button class="perf-toggle" data-pf="bronze">Bronze</button>
+</div>
+<div class="perf-grid" id="perf-grid"></div>
 </div>
 
 <!-- Market Analysis Section -->
@@ -211,6 +257,38 @@ const stations=[
 {call:"WNNE",ch:31,network:"CW+",market:"Burlington-Plattsburgh",rank:96,state:"VT",region:"Northeast",hh:340000,lat:44.46,lon:-73.18}
 ];
 
+// Revenue & Ratings seed data (deterministic from station properties)
+function seedRand(s){let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h)+s.charCodeAt(i);h|=0}return()=>{h^=h<<13;h^=h>>17;h^=h<<5;return(h>>>0)/4294967296}}
+stations.forEach(s=>{
+const rng=seedRand(s.call+s.market);
+// Revenue tier based on market rank + some variation
+const revBase=s.rank<=20?4:s.rank<=40?3:s.rank<=70?2:1;
+const revAdj=rng()>0.7?(rng()>0.5?1:-1):0;
+s.revTier=Math.max(1,Math.min(4,revBase+revAdj));
+s.revTierName=['bronze','silver','gold','platinum'][s.revTier-1];
+s.revTierLabel=['Bronze','Silver','Gold','Platinum'][s.revTier-1];
+// Estimated annual revenue ($M)
+const baseRev=[8,22,45,85][s.revTier-1];
+s.estRevenue=+(baseRev*(0.8+rng()*0.4)).toFixed(1);
+// Rating (share percentage)
+const baseRating=s.rank<=15?8:s.rank<=35?6:s.rank<=60?4.5:3;
+s.rating=+(baseRating*(0.7+rng()*0.6)).toFixed(1);
+// Trend data (6 quarters of rating history)
+s.ratingTrend=[];
+let tVal=s.rating*(0.85+rng()*0.15);
+for(let q=0;q<6;q++){tVal+=((rng()-0.45)*1.2);tVal=Math.max(1,tVal);s.ratingTrend.push(+tVal.toFixed(1))}
+s.ratingTrend[5]=s.rating; // current = last point
+// Trend direction
+const trendDiff=s.ratingTrend[5]-s.ratingTrend[0];
+s.trendDir=trendDiff>0.5?'up':trendDiff<-0.5?'down':'flat';
+s.trendPct=+(trendDiff/Math.max(s.ratingTrend[0],1)*100).toFixed(1);
+// Revenue trend (6 quarters)
+s.revTrend=[];
+let rVal=s.estRevenue*0.88;
+for(let q=0;q<6;q++){rVal+=(rng()-0.4)*s.estRevenue*0.08;rVal=Math.max(1,rVal);s.revTrend.push(+rVal.toFixed(1))}
+s.revTrend[5]=s.estRevenue;
+});
+
 // KPIs
 const totalHH=new Set();let netCounts={};stations.forEach(s=>{totalHH.add(s.market+s.hh);netCounts[s.network]=(netCounts[s.network]||0)+1});
 const uniqueMarkets=new Set(stations.map(s=>s.market)).size;
@@ -260,6 +338,29 @@ tooltip.style.top=(e.clientY-r.top-10)+'px';
 const maxHH=Math.max(...stations.map(s=>s.hh));
 let sortCol='call',sortAsc=true;
 function badgeClass(n){return n==='ABC'?'badge-abc':n==='NBC'?'badge-nbc':n==='CBS'?'badge-cbs':n.startsWith('CW')?'badge-cw':'badge-ind'}
+
+function sparkSVG(data,color,w=60,h=18){
+const mn=Math.min(...data),mx=Math.max(...data),range=mx-mn||1;
+const pts=data.map((v,i)=>`${(i/(data.length-1))*w},${h-((v-mn)/range)*h}`).join(' ');
+return `<span class="sparkline-wrap"><svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+function tierHTML(s){
+const icons={platinum:'◆',gold:'◆',silver:'◆',bronze:'◆'};
+return `<span class="rev-tier tier-${s.revTierName}"><span class="tier-icon">${icons[s.revTierName]}</span>${s.revTierLabel} · $${s.estRevenue}M</span>`;
+}
+
+function ratingHTML(s){
+const arrow=s.trendDir==='up'?'▲':s.trendDir==='down'?'▼':'—';
+const cls=`rating-${s.trendDir}`;
+const pct=s.trendDir==='flat'?'':(s.trendPct>0?'+':'')+s.trendPct+'%';
+return `<span class="rating-indicator ${cls}"><span class="rating-val">${s.rating}</span><span class="rating-arrow">${arrow}</span><span style="font-size:.75rem">${pct}</span></span>`;
+}
+
+function trendHTML(s){
+const color=s.trendDir==='up'?'var(--green)':s.trendDir==='down'?'var(--red)':'var(--text2)';
+return sparkSVG(s.ratingTrend,color);
+}
 
 // FCC license data cache
 const fccCache={};
@@ -333,6 +434,9 @@ document.getElementById('tbody').innerHTML=data.map((s,i)=>`<tr data-call="${s.c
 <td>${s.state}</td>
 <td>${s.region}</td>
 <td>${(s.hh/1e6).toFixed(2)}M</td>
+<td>${tierHTML(s)}</td>
+<td>${ratingHTML(s)}</td>
+<td>${trendHTML(s)}</td>
 <td><div class="market-bar"><div class="market-bar-fill" style="width:${(s.hh/maxHH*100).toFixed(1)}%"></div></div></td>
 </tr>`).join('');
 
@@ -355,10 +459,10 @@ row.classList.add('expanded');
 this.textContent='▼';
 const detailRow=document.createElement('tr');
 detailRow.classList.add('detail-row');
-detailRow.innerHTML=`<td colspan="9"><div class="dp-loading">Loading FCC license data for ${call}...</div></td>`;
+detailRow.innerHTML=`<td colspan="12"><div class="dp-loading">Loading FCC license data for ${call}...</div></td>`;
 row.after(detailRow);
 const fcc=await fetchFCCData(call);
-detailRow.innerHTML=`<td colspan="9">${renderDetailPanel(fcc)}</td>`;
+detailRow.innerHTML=`<td colspan="12">${renderDetailPanel(fcc)}</td>`;
 });
 });
 }
@@ -375,7 +479,7 @@ return true;
 });
 d.sort((a,b)=>{
 let va=a[sortCol],vb=b[sortCol];
-if(sortCol==='hh'||sortCol==='rank'){va=+va;vb=+vb}else{va=String(va).toLowerCase();vb=String(vb).toLowerCase()}
+if(sortCol==='hh'||sortCol==='rank'){va=+va;vb=+vb}else if(sortCol==='revenue'){va=a.revTier;vb=b.revTier}else if(sortCol==='rating'){va=a.rating;vb=b.rating}else if(sortCol==='trend'){va=a.trendPct;vb=b.trendPct}else{va=String(va).toLowerCase();vb=String(vb).toLowerCase()}
 return va<vb?(sortAsc?-1:1):va>vb?(sortAsc?1:-1):0;
 });
 return d;
@@ -399,6 +503,46 @@ update();
 });
 
 update();
+
+// === REVENUE & RATINGS PERFORMANCE OVERLAY ===
+(function renderPerfOverlay(){
+const grid=document.getElementById('perf-grid');
+let activeFilter='all';
+function renderCards(filter){
+const filtered=filter==='all'?stations:stations.filter(s=>s.revTierName===filter);
+const sorted=[...filtered].sort((a,b)=>b.estRevenue-a.estRevenue);
+grid.innerHTML=sorted.map(s=>{
+const rColor=s.trendDir==='up'?'var(--green)':s.trendDir==='down'?'var(--red)':'var(--text2)';
+const revColor=s.revTrend[5]>=s.revTrend[0]?'var(--green)':'var(--red)';
+const quarters=['Q3 \'24','Q4 \'24','Q1 \'25','Q2 \'25','Q3 \'25','Q4 \'25'];
+return `<div class="perf-card">
+<h4>${s.call} <span class="badge ${badgeClass(s.network)}" style="font-size:.7rem;vertical-align:middle">${s.network}</span></h4>
+<div class="perf-meta">${s.market}, ${s.state} · DMA #${s.rank}</div>
+<div class="perf-row"><span class="perf-label">Revenue Tier</span><span class="perf-value">${tierHTML(s)}</span></div>
+<div class="perf-row"><span class="perf-label">Nielsen Rating</span><span class="perf-value">${ratingHTML(s)}</span></div>
+<div class="perf-row"><span class="perf-label">HH Reach</span><span class="perf-value">${(s.hh/1e6).toFixed(2)}M</span></div>
+<div class="perf-row"><span class="perf-label">Est. Rev/HH</span><span class="perf-value">$${(s.estRevenue/s.hh*1e6).toFixed(2)}</span></div>
+<div class="trend-sparkline">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+<span style="font-size:.75rem;color:var(--text2)">Rating Trend (6Q)</span>${sparkSVG(s.ratingTrend,rColor,80,22)}
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center">
+<span style="font-size:.75rem;color:var(--text2)">Revenue Trend (6Q)</span>${sparkSVG(s.revTrend,revColor,80,22)}
+</div>
+<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:.65rem;color:var(--text2)">${quarters.map(q=>`<span>${q}</span>`).join('')}</div>
+</div>
+</div>`;
+}).join('');
+}
+renderCards('all');
+document.querySelectorAll('.perf-toggle').forEach(btn=>{
+btn.addEventListener('click',()=>{
+document.querySelectorAll('.perf-toggle').forEach(b=>b.classList.remove('active'));
+btn.classList.add('active');
+renderCards(btn.dataset.pf);
+});
+});
+})();
 
 // === MARKET ANALYSIS ===
 document.querySelectorAll('.tab-btn').forEach(btn=>{
