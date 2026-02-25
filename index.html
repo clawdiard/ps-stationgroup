@@ -50,6 +50,22 @@ tr:hover td{background:rgba(74,158,255,.04)}
 .scroll-table::-webkit-scrollbar{width:6px}
 .scroll-table::-webkit-scrollbar-track{background:var(--surface)}
 .scroll-table::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.detail-row td{padding:0!important;border-top:none!important;background:var(--surface2)}
+.detail-panel{padding:20px 24px;display:grid;grid-template-columns:1fr 1fr;gap:16px 32px;font-size:.85rem}
+.detail-panel .dp-section{display:flex;flex-direction:column;gap:6px}
+.detail-panel .dp-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);font-weight:600}
+.detail-panel .dp-value{color:var(--text);font-weight:500}
+.dp-status{display:inline-flex;align-items:center;gap:6px}
+.dp-status .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dp-status .dot.active{background:var(--green)}
+.dp-status .dot.expired{background:var(--red)}
+.dp-status .dot.pending{background:var(--amber)}
+.dp-loading{color:var(--text2);font-style:italic;padding:16px 24px}
+.dp-error{color:var(--red);padding:16px 24px;font-size:.85rem}
+.expand-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:1.1rem;padding:2px 6px;border-radius:4px;transition:background .15s}
+.expand-btn:hover{background:rgba(74,158,255,.1)}
+tr.expanded>td{background:rgba(74,158,255,.06)!important}
+@media(max-width:768px){.detail-panel{grid-template-columns:1fr}}
 footer{text-align:center;padding:32px 0;color:var(--text2);font-size:.8rem;border-top:1px solid var(--border);margin-top:32px}
 @media(max-width:768px){.app{padding:16px}header h1{font-size:1.8rem}#map-container{height:300px}td,th{padding:10px 12px;font-size:.8rem}.kpi-row{grid-template-columns:repeat(2,1fr)}}
 </style>
@@ -80,6 +96,7 @@ footer{text-align:center;padding:32px 0;color:var(--text2);font-size:.8rem;borde
 <table id="stationTable">
 <thead>
 <tr>
+<th style="width:40px"></th>
 <th data-col="call" class="active">Call Sign <span class="sort-arrow">▲</span></th>
 <th data-col="network">Network <span class="sort-arrow">▲</span></th>
 <th data-col="market">Market <span class="sort-arrow">▲</span></th>
@@ -187,8 +204,71 @@ const maxHH=Math.max(...stations.map(s=>s.hh));
 let sortCol='call',sortAsc=true;
 function badgeClass(n){return n==='ABC'?'badge-abc':n==='NBC'?'badge-nbc':n==='CBS'?'badge-cbs':n.startsWith('CW')?'badge-cw':'badge-ind'}
 
+// FCC license data cache
+const fccCache={};
+
+async function fetchFCCData(callSign){
+const clean=callSign.split('/')[0].replace(/[^A-Z]/g,'');
+if(fccCache[clean])return fccCache[clean];
+try{
+const url=`https://data.fcc.gov/api/license-view/basicSearch/getLicenses?searchValue=${clean}&format=json`;
+const resp=await fetch(url);
+if(!resp.ok)throw new Error('FCC API error');
+const data=await resp.json();
+const licenses=data?.Licenses?.License;
+if(!licenses||licenses.length===0)throw new Error('No license found');
+// Find broadcast TV license (prefer active)
+const tvLicense=Array.isArray(licenses)?
+(licenses.find(l=>l.serviceDesc&&l.serviceDesc.includes('Broadcast')&&l.statusDesc==='Active')||licenses.find(l=>l.serviceDesc&&l.serviceDesc.includes('Broadcast'))||licenses[0]):licenses;
+const result={
+callSign:tvLicense.callSign||clean,
+status:tvLicense.statusDesc||'Unknown',
+serviceDesc:tvLicense.serviceDesc||'N/A',
+licenseExpiry:tvLicense.expiredDate||'N/A',
+grantDate:tvLicense.grantDate||'N/A',
+effectiveDate:tvLicense.effectiveDate||'N/A',
+frn:tvLicense.frn||'N/A',
+licenseeName:tvLicense.licName||'N/A',
+categoryDesc:tvLicense.categoryDesc||'N/A',
+id:tvLicense.licenseID||''
+};
+fccCache[clean]=result;
+return result;
+}catch(e){
+const fallback={callSign:clean,status:'Lookup Failed',serviceDesc:'N/A',licenseExpiry:'N/A',grantDate:'N/A',effectiveDate:'N/A',frn:'N/A',licenseeName:'N/A',categoryDesc:'N/A',id:'',error:e.message};
+fccCache[clean]=fallback;
+return fallback;
+}
+}
+
+function statusDot(status){
+const s=status.toLowerCase();
+if(s==='active')return '<span class="dot active"></span>';
+if(s.includes('expire'))return '<span class="dot expired"></span>';
+return '<span class="dot pending"></span>';
+}
+
+function renderDetailPanel(fcc){
+if(fcc.error&&fcc.status==='Lookup Failed'){
+return `<div class="dp-error">⚠ Could not retrieve FCC data: ${fcc.error}. <a href="https://wireless.fcc.gov/cgi-bin/wsb/public/wsb_query.pl?CallSign=${fcc.callSign}" target="_blank" rel="noopener" style="color:var(--accent)">Search FCC manually →</a></div>`;
+}
+const fccLink=fcc.id?`<a href="https://wireless.fcc.gov/cgi-bin/wsb/public/wsb_query.pl?CallSign=${fcc.callSign}" target="_blank" rel="noopener" style="color:var(--accent)">View on FCC →</a>`:'';
+return `<div class="detail-panel">
+<div class="dp-section"><span class="dp-label">License Status</span><span class="dp-value"><span class="dp-status">${statusDot(fcc.status)} ${fcc.status}</span></span></div>
+<div class="dp-section"><span class="dp-label">Service Type</span><span class="dp-value">${fcc.serviceDesc}</span></div>
+<div class="dp-section"><span class="dp-label">Licensee</span><span class="dp-value">${fcc.licenseeName}</span></div>
+<div class="dp-section"><span class="dp-label">FRN</span><span class="dp-value">${fcc.frn}</span></div>
+<div class="dp-section"><span class="dp-label">Grant Date</span><span class="dp-value">${fcc.grantDate}</span></div>
+<div class="dp-section"><span class="dp-label">License Expiry</span><span class="dp-value">${fcc.licenseExpiry}</span></div>
+<div class="dp-section"><span class="dp-label">Effective Date</span><span class="dp-value">${fcc.effectiveDate}</span></div>
+<div class="dp-section"><span class="dp-label">Category</span><span class="dp-value">${fcc.categoryDesc}</span></div>
+${fccLink?`<div class="dp-section" style="grid-column:1/-1">${fccLink}</div>`:''}
+</div>`;
+}
+
 function render(data){
-document.getElementById('tbody').innerHTML=data.map(s=>`<tr>
+document.getElementById('tbody').innerHTML=data.map((s,i)=>`<tr data-call="${s.call}" class="station-row">
+<td><button class="expand-btn" data-call="${s.call}" title="View FCC License Data">▶</button></td>
 <td><strong>${s.call}</strong></td>
 <td><span class="badge ${badgeClass(s.network)}">${s.network}</span></td>
 <td>${s.market}</td>
@@ -198,6 +278,32 @@ document.getElementById('tbody').innerHTML=data.map(s=>`<tr>
 <td>${(s.hh/1e6).toFixed(2)}M</td>
 <td><div class="market-bar"><div class="market-bar-fill" style="width:${(s.hh/maxHH*100).toFixed(1)}%"></div></div></td>
 </tr>`).join('');
+
+// Attach expand handlers
+document.querySelectorAll('.expand-btn').forEach(btn=>{
+btn.addEventListener('click',async function(){
+const call=this.dataset.call;
+const row=this.closest('tr');
+const existing=row.nextElementSibling;
+if(existing&&existing.classList.contains('detail-row')){
+existing.remove();
+row.classList.remove('expanded');
+this.textContent='▶';
+return;
+}
+// Close any other open panels
+document.querySelectorAll('.detail-row').forEach(r=>r.remove());
+document.querySelectorAll('.station-row.expanded').forEach(r=>{r.classList.remove('expanded');r.querySelector('.expand-btn').textContent='▶'});
+row.classList.add('expanded');
+this.textContent='▼';
+const detailRow=document.createElement('tr');
+detailRow.classList.add('detail-row');
+detailRow.innerHTML=`<td colspan="9"><div class="dp-loading">Loading FCC license data for ${call}...</div></td>`;
+row.after(detailRow);
+const fcc=await fetchFCCData(call);
+detailRow.innerHTML=`<td colspan="9">${renderDetailPanel(fcc)}</td>`;
+});
+});
 }
 
 function getFiltered(){
